@@ -30,22 +30,53 @@ if (!("country" %in% names(worldcities))) {
   worldcities$country <- "Unknown"
 }
 
-if (!("region" %in% names(worldcities))) {
-  if ("admin_name" %in% names(worldcities)) {
-    worldcities$region <- worldcities$admin_name
-  } else {
-    worldcities$region <- "Unknown"
-  }
+if (!("continent" %in% names(worldcities))) {
+  worldcities$continent <- NA_character_
 }
 
 worldcities$country <- as.character(worldcities$country)
-worldcities$region <- as.character(worldcities$region)
+worldcities$continent <- as.character(worldcities$continent)
+
+if (all(is.na(worldcities$continent) | trimws(worldcities$continent) == "") &&
+    requireNamespace("rnaturalearth", quietly = TRUE)) {
+  countries_ref <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf") %>%
+    sf::st_drop_geometry()
+
+  iso_lookup <- countries_ref %>%
+    transmute(iso2 = toupper(as.character(iso_a2)), continent_lookup = as.character(continent)) %>%
+    filter(!is.na(iso2), iso2 != "", !is.na(continent_lookup), continent_lookup != "") %>%
+    distinct(iso2, .keep_all = TRUE)
+
+  name_lookup <- bind_rows(
+    countries_ref %>% transmute(country_key = tolower(as.character(name)), continent_lookup = as.character(continent)),
+    countries_ref %>% transmute(country_key = tolower(as.character(name_long)), continent_lookup = as.character(continent)),
+    countries_ref %>% transmute(country_key = tolower(as.character(formal_en)), continent_lookup = as.character(continent)),
+    countries_ref %>% transmute(country_key = tolower(as.character(sovereignt)), continent_lookup = as.character(continent))
+  ) %>%
+    filter(!is.na(country_key), country_key != "", !is.na(continent_lookup), continent_lookup != "") %>%
+    distinct(country_key, .keep_all = TRUE)
+
+  derived_continent <- rep(NA_character_, nrow(worldcities))
+
+  if ("iso2" %in% names(worldcities)) {
+    iso_idx <- match(toupper(as.character(worldcities$iso2)), iso_lookup$iso2)
+    derived_continent <- iso_lookup$continent_lookup[iso_idx]
+  }
+
+  missing_idx <- is.na(derived_continent) | trimws(derived_continent) == ""
+  if (any(missing_idx)) {
+    country_idx <- match(tolower(as.character(worldcities$country[missing_idx])), name_lookup$country_key)
+    derived_continent[missing_idx] <- name_lookup$continent_lookup[country_idx]
+  }
+
+  replace_idx <- is.na(worldcities$continent) | trimws(worldcities$continent) == ""
+  worldcities$continent[replace_idx] <- derived_continent[replace_idx]
+}
+
 worldcities$country[is.na(worldcities$country) | trimws(worldcities$country) == ""] <- "Unknown"
-worldcities$region[is.na(worldcities$region) | trimws(worldcities$region) == ""] <- "Unknown"
+worldcities$continent[is.na(worldcities$continent) | trimws(worldcities$continent) == ""] <- "Unknown"
 
-country_choices <- c("All", sort(unique(worldcities$country)))
-region_choices <- c("All", sort(unique(worldcities$region)))
-
+continent_choices <- c("All", sort(unique(worldcities$continent)))
 ui <- fluidPage(
   tags$head(
     tags$style(HTML(
@@ -94,42 +125,48 @@ ui <- fluidPage(
     ),
     column(
       width = 3,
-      selectInput("country_filter", "Country", choices = country_choices, selected = "All")
+      selectInput("continent_filter", "Continent", choices = continent_choices, selected = "All")
     ),
     column(
       width = 3,
-      selectInput("region_filter", "Region", choices = region_choices, selected = "All")
+      selectizeInput("country_filter", "Country", choices = NULL, selected = "All")
     ),
     column(
       width = 2,
       checkboxInput("show_labels", "Show city labels", value = FALSE),
-      helpText("Tip: Use zoom + pan to explore regions. Click a point for details.")
+      helpText("Tip: Use zoom + pan to explore continents and countries. Click a point for details.")
     )
   ),
   div(id = "map_wrap", leafletOutput("map", width = "100%", height = "100%"))
 )
 
 server <- function(input, output, session) {
-  observeEvent(input$country_filter, {
-    region_pool <- worldcities
-    if (!is.null(input$country_filter) && input$country_filter != "All") {
-      region_pool <- region_pool %>% filter(country == input$country_filter)
+  observeEvent(input$continent_filter, {
+    country_pool <- worldcities
+    if (!is.null(input$continent_filter) && input$continent_filter != "All") {
+      country_pool <- country_pool %>% filter(continent == input$continent_filter)
     }
 
-    updated_regions <- c("All", sort(unique(region_pool$region)))
-    selected_region <- input$region_filter
-    if (is.null(selected_region) || !(selected_region %in% updated_regions)) {
-      selected_region <- "All"
+    updated_countries <- c("All", sort(unique(country_pool$country)))
+    selected_country <- input$country_filter
+    if (is.null(selected_country) || !(selected_country %in% updated_countries)) {
+      selected_country <- "All"
     }
 
-    updateSelectInput(session, "region_filter", choices = updated_regions, selected = selected_region)
+    updateSelectizeInput(
+      session,
+      "country_filter",
+      choices = updated_countries,
+      selected = selected_country,
+      server = TRUE
+    )
   }, ignoreInit = FALSE)
 
   filtered <- reactive({
     data <- worldcities %>%
       filter(
-        input$country_filter == "All" | country == input$country_filter,
-        input$region_filter == "All" | region == input$region_filter
+        input$continent_filter == "All" | continent == input$continent_filter,
+        input$country_filter == "All" | country == input$country_filter
       )
 
     if (!all(is.na(data$population))) {
