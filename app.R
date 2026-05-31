@@ -216,13 +216,34 @@ server <- function(input, output, session) {
       "Population: ", ifelse(is.na(data$population), "NA", format(data$population, big.mark = ","))
     )
 
+    if (nrow(data) > 0 && any(!is.na(data$population))) {
+      pop_min <- min(data$population, na.rm = TRUE)
+      pop_max <- max(data$population, na.rm = TRUE)
+
+      if (isTRUE(all.equal(pop_min, pop_max))) {
+        marker_fill <- rep("#08306b", nrow(data))
+      } else {
+        pop_palette <- colorNumeric(
+          palette = c("#dbeaf7", "#08306b"),
+          domain = c(pop_min, pop_max),
+          na.color = "#bdbdbd"
+        )
+        marker_fill <- pop_palette(data$population)
+      }
+    } else {
+      marker_fill <- rep("#5f9ea0", nrow(data))
+    }
+
     map_obj <- leafletProxy("map", data = data) %>%
       clearMarkers() %>%
       clearGroup("city_labels") %>%
       addCircleMarkers(
         radius = 6,
-        stroke = FALSE,
-        fillOpacity = 0.7,
+        stroke = TRUE,
+        weight = 0.7,
+        color = marker_fill,
+        fillColor = marker_fill,
+        fillOpacity = 0.8,
         popup = popup_text
       )
 
