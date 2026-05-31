@@ -1,0 +1,18 @@
+Las Ciudades del Imperio
+name,type,lat,lon,foundation,province,entity,wikipedia
+Santo Domingo,puerto,18.476389,-69.893333,1498,Santo Domingo,Virreinato de Nueva España,
+Nombre de Dios,puerto,9.582889,-79.470306,1510,Panama,Virreinato de Nueva Granada,
+La Habana,puerto,23.136667,-82.358889,1515,Cuba,Capitanía General de Cuba,
+Veracruz,puerto,19.433333,-96.383333,1519,Mexico,Virreinato de Nueva España,Veracruz
+Panama,puerto,9,-80,1519,Panamá,Virreinato de Nueva Granada,
+Mexico,ciudad,19.433333,-99.133333,1521,Mexico,Virreinato de Nueva España,Mexico_City
+Acapulco,puerto,16.863611,-99.8825,1523,Mexico,Virreinato de Nueva España,Acapulco
+Cartagena,puerto,10.423611,-75.525278,1533,Colombia,Virreinato de Nueva Granada,
+El Realejo,puerto,12.54307,-87.16466,1534,Nicaragua,Capitanía General de Guatemala,
+Lima,ciudad,-12.05,-77.033333,1535,Peru,Virreinato de Perú,
+Buenos Aires,puerto,-34.599722,-58.381944,1536,Argentina,Virreinato del Río de la Plata,
+Valparaiso,puerto,-33.05,-71.616667,1536,Chile,Virreinato de Perú,
+Manila,puerto,14.6,120.98,1571,Filipinas,Nueva España,Manila
+Sevilla,puerto,España
+Cadiz,puerto,España
+
