@@ -108,8 +108,11 @@ server <- function(input, output, session) {
   observe({
     data <- filtered()
 
+    wiki_city <- utils::URLencode(as.character(data$city), reserved = TRUE)
+    wiki_url <- paste0("https://en.wikipedia.org/wiki/", wiki_city)
+
     popup_text <- paste0(
-      "<b>", data$city, "</b><br>",
+      "<b><a href='", wiki_url, "' target='_blank' rel='noopener noreferrer'>", data$city, "</a></b><br>",
       "Country: ", data$country, "<br>",
       "Population: ", ifelse(is.na(data$population), "NA", format(data$population, big.mark = ","))
     )
