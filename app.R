@@ -30,6 +30,22 @@ if (!("country" %in% names(worldcities))) {
   worldcities$country <- "Unknown"
 }
 
+if (!("region" %in% names(worldcities))) {
+  if ("admin_name" %in% names(worldcities)) {
+    worldcities$region <- worldcities$admin_name
+  } else {
+    worldcities$region <- "Unknown"
+  }
+}
+
+worldcities$country <- as.character(worldcities$country)
+worldcities$region <- as.character(worldcities$region)
+worldcities$country[is.na(worldcities$country) | trimws(worldcities$country) == ""] <- "Unknown"
+worldcities$region[is.na(worldcities$region) | trimws(worldcities$region) == ""] <- "Unknown"
+
+country_choices <- c("All", sort(unique(worldcities$country)))
+region_choices <- c("All", sort(unique(worldcities$region)))
+
 ui <- fluidPage(
   tags$head(
     tags$style(HTML(
@@ -63,7 +79,7 @@ ui <- fluidPage(
   titlePanel("World Cities Interactive Map"),
   fluidRow(
     column(
-      width = 9,
+      width = 4,
       sliderInput(
         "min_pop",
         "Minimum population",
@@ -78,6 +94,14 @@ ui <- fluidPage(
     ),
     column(
       width = 3,
+      selectInput("country_filter", "Country", choices = country_choices, selected = "All")
+    ),
+    column(
+      width = 3,
+      selectInput("region_filter", "Region", choices = region_choices, selected = "All")
+    ),
+    column(
+      width = 2,
       checkboxInput("show_labels", "Show city labels", value = FALSE),
       helpText("Tip: Use zoom + pan to explore regions. Click a point for details.")
     )
@@ -86,13 +110,33 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
-  filtered <- reactive({
-    data <- worldcities
-    if (all(is.na(data$population))) {
-      return(data)
+  observeEvent(input$country_filter, {
+    region_pool <- worldcities
+    if (!is.null(input$country_filter) && input$country_filter != "All") {
+      region_pool <- region_pool %>% filter(country == input$country_filter)
     }
-    data %>%
-      filter(!is.na(population) & population >= (input$min_pop * 1e6))
+
+    updated_regions <- c("All", sort(unique(region_pool$region)))
+    selected_region <- input$region_filter
+    if (is.null(selected_region) || !(selected_region %in% updated_regions)) {
+      selected_region <- "All"
+    }
+
+    updateSelectInput(session, "region_filter", choices = updated_regions, selected = selected_region)
+  }, ignoreInit = FALSE)
+
+  filtered <- reactive({
+    data <- worldcities %>%
+      filter(
+        input$country_filter == "All" | country == input$country_filter,
+        input$region_filter == "All" | region == input$region_filter
+      )
+
+    if (!all(is.na(data$population))) {
+      data <- data %>% filter(!is.na(population) & population >= (input$min_pop * 1e6))
+    }
+
+    data
   })
 
   output$map <- renderLeaflet({
@@ -103,6 +147,24 @@ server <- function(input, output, session) {
         options = scaleBarOptions(metric = TRUE, imperial = FALSE)
       ) %>%
       setView(lng = 10, lat = 20, zoom = 2)
+  })
+
+  observe({
+    data <- filtered()
+    req(nrow(data) > 0)
+
+    bbox <- sf::st_bbox(data)
+    if (any(!is.finite(bbox))) {
+      return()
+    }
+
+    leafletProxy("map") %>%
+      fitBounds(
+        lng1 = unname(bbox["xmin"]),
+        lat1 = unname(bbox["ymin"]),
+        lng2 = unname(bbox["xmax"]),
+        lat2 = unname(bbox["ymax"])
+      )
   })
 
   observe({
@@ -118,24 +180,33 @@ server <- function(input, output, session) {
     )
 
     map_obj <- leafletProxy("map", data = data) %>%
-      clearMarkers()
+      clearMarkers() %>%
+      clearGroup("city_labels") %>%
+      addCircleMarkers(
+        radius = 6,
+        stroke = FALSE,
+        fillOpacity = 0.7,
+        popup = popup_text
+      )
 
-    if (isTRUE(input$show_labels)) {
-      map_obj <- map_obj %>%
-        addCircleMarkers(
-          radius = 6,
-          stroke = FALSE,
-          fillOpacity = 0.7,
-          popup = popup_text,
-          label = ~city
-        )
-    } else {
-      map_obj <- map_obj %>%
-        addCircleMarkers(
-          radius = 6,
-          stroke = FALSE,
-          fillOpacity = 0.7,
-          popup = popup_text
+    if (isTRUE(input$show_labels) && nrow(data) > 0) {
+      coords <- sf::st_coordinates(data)
+      data$lng <- coords[, 1]
+      data$lat <- coords[, 2]
+
+      map_obj %>%
+        addLabelOnlyMarkers(
+          data = data,
+          lng = ~lng,
+          lat = ~lat,
+          label = ~city,
+          group = "city_labels",
+          labelOptions = labelOptions(
+            noHide = TRUE,
+            direction = "top",
+            textOnly = TRUE,
+            style = list("font-size" = "11px", "font-weight" = "600")
+          )
         )
     }
   })
